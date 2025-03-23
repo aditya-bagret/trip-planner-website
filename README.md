@@ -1,4 +1,3 @@
-
 # Trip Planner Website
 
 ## Description
@@ -10,6 +9,7 @@ The Trip Planner Website is a web application designed to assist users in planni
 ### Prerequisites
 
 - Node.js and npm installed
+- MySQL server installed (for local database)
 
 ### Installation
 
@@ -28,7 +28,38 @@ The Trip Planner Website is a web application designed to assist users in planni
    VITE_GOOGLE_AUTH_CLIENT_API_KEY = '<your-google-auth-client-api-key>'
    VITE_FIREBASE_AUTH_API_KEY = '<your-firebase-auth-api-key>'
    ```
-4. **Run the development server**:
+
+### Using MySQL Database (Local Development)
+
+This project can use either Firebase (default) or a local MySQL database. To use MySQL:
+
+1. **Set up the MySQL server**:
+   - Navigate to the server directory:
+     ```bash
+     cd server
+     ```
+   - Install server dependencies:
+     ```bash
+     npm install
+     ```
+   - Configure the `.env` file with your MySQL credentials:
+     ```
+     DB_HOST=localhost
+     DB_USER=your_mysql_username
+     DB_PASSWORD=your_mysql_password
+     DB_NAME=trip_planner
+     PORT=5000
+     ```
+   - Initialize the database (creates necessary tables):
+     ```bash
+     npm run init-db
+     ```
+   - Start the server:
+     ```bash
+     npm run dev
+     ```
+
+2. **Start the frontend application** (in a separate terminal):
    ```bash
    npm run dev
    ```
@@ -42,4 +73,4 @@ The Trip Planner Website is a web application designed to assist users in planni
 - **Google Places API**: Location-based search
 - **Google Gemini**: Trip planning intelligence
 - **Google OAuth**: User authentication
-- **Firebase**: Database management
+- **Firebase/MySQL**: Database management (can use either)

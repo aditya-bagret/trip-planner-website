@@ -21,8 +21,7 @@ import {
 import { FcGoogle } from "react-icons/fc";
 import { useGoogleLogin } from "@react-oauth/google";
 import axios from "axios";
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "@/service/firebaseConfig";
+import { saveTrip, saveUser } from "@/service/mysqlApi";
 import { Loading } from "@/components/common/Loading";
 import { useNavigate } from "react-router-dom";
 
@@ -123,12 +122,13 @@ export const CreateTrip = () => {
     }
 
     try {
-      await setDoc(doc(db, "trips", docId), {
+      await saveTrip({
+        id: docId,
         userSelection: formData,
         tripData: parsedTripData,
         userEmail: user?.email,
-        id: docId,
       });
+      
       setLoading(false);
       navigate(`/view-trip/${docId}`);
     } catch (error) {
@@ -150,9 +150,22 @@ export const CreateTrip = () => {
           },
         }
       )
-      .then((response) => {
+      .then(async (response) => {
         console.log(response);
-        localStorage.setItem("user", JSON.stringify(response.data));
+        const userData = response.data;
+        
+        try {
+          await saveUser({
+            id: userData.id,
+            email: userData.email,
+            name: userData.name,
+            picture: userData.picture
+          });
+        } catch (error) {
+          console.error("Error saving user:", error);
+        }
+        
+        localStorage.setItem("user", JSON.stringify(userData));
         setOpenDialog(false);
         generateTrip();
       });

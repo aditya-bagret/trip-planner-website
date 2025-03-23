@@ -3,8 +3,7 @@ import { Navbar } from "@/components/common/Navbar";
 import { HotelSection } from "@/components/view-trip/HotelSection";
 import { InfoSection } from "@/components/view-trip/InfoSection";
 import { VisitSection } from "@/components/view-trip/VisitSection";
-import { db } from "@/service/firebaseConfig";
-import { doc, getDoc } from "firebase/firestore";
+import { getTripById } from "@/service/mysqlApi";
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -12,21 +11,21 @@ import { toast } from "sonner";
 export const ViewTrip = () => {
   const { tripId } = useParams();
   const [tripData, setTripData] = useState([]);
+  
   const getTripData = async () => {
-    const docRef = doc(db, "trips", tripId);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      console.log("Document data:", docSnap.data());
-      setTripData(docSnap.data());
-    } else {
-      // docSnap.data() will be undefined in this case
-      console.log("No such document!");
+    try {
+      const data = await getTripById(tripId);
+      setTripData(data);
+    } catch (error) {
+      console.error("Error fetching trip:", error);
       toast("No Trip Found");
     }
   };
+  
   useEffect(() => {
     getTripData();
   }, [tripId]);
+  
   return (
     <div>
       <Navbar />
