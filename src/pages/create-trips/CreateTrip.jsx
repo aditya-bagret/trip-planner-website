@@ -8,7 +8,7 @@ import {
 } from "@/constants/options";
 import { chatSession } from "@/service/AIModal";
 import React, { useEffect, useState } from "react";
-import GooglePlacesAutocomplete from "react-google-places-autocomplete";
+import { PlaceSearch } from "@/components/common/PlaceSearch";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -86,60 +86,124 @@ export const CreateTrip = () => {
       .replace("{totalDays}", formData?.noOfDays);
 
     try {
-      console.log(FINAL_PROMPT, "prompt");
+      console.log("Sending prompt to AI:", FINAL_PROMPT);
       const result = await chatSession.sendMessage(FINAL_PROMPT);
-      console.log(result, "Final");
-      saveTrip(result?.response?.text());
+      console.log("Raw AI result:", result);
+      console.log("AI response text:", result?.response?.text());
+      
+      if (!result?.response?.text()) {
+        throw new Error("No trip data received from AI");
+      }
+      
+      const responseText = result.response.text();
+      console.log("Response text to be processed:", responseText);
+      
+      await processAndSaveTrip(responseText);
     } catch (error) {
-      console.error("Error sending message:", error);
-      toast("An error occurred while generating the trip.");
+      console.error("Error generating trip:", error);
+      toast.error(error.message || "An error occurred while generating the trip.");
     } finally {
       setLoading(false);
     }
   };
 
-  const saveTrip = async (tripData) => {
+  const processAndSaveTrip = async (tripData) => {
     setLoading(true);
 
     const docId = Date.now().toString();
     const user = JSON.parse(localStorage.getItem("user"));
 
+    if (!user?.email) {
+      console.error("No user email found in localStorage");
+      toast.error("Please login again to continue");
+      setLoading(false);
+      return;
+    }
+
     let parsedTripData;
     try {
-      console.log(tripData);
+      console.log("Attempting to parse trip data:", tripData);
       parsedTripData = JSON.parse(tripData);
-      if (Array.isArray(parsedTripData) && Array.isArray(parsedTripData[0])) {
-        parsedTripData = {
-          hotels: parsedTripData[0],
-          plans: parsedTripData[1],
-        };
+      
+      // Check if the data is in the expected format
+      if (!parsedTripData) {
+        throw new Error("Invalid trip data format");
       }
+
+      // Handle both array format and object format
+      if (Array.isArray(parsedTripData)) {
+        console.log("Received array format, converting to object format");
+        if (parsedTripData.length >= 2) {
+          parsedTripData = {
+            hotels: parsedTripData[0],
+            plans: parsedTripData[1],
+          };
+        } else {
+          throw new Error("Invalid array format in trip data");
+        }
+      } else if (typeof parsedTripData === 'object') {
+        console.log("Received object format");
+        // If we have a direct object with hotels and itinerary keys
+        if (parsedTripData.hotels && parsedTripData.itinerary) {
+          parsedTripData = {
+            hotels: parsedTripData.hotels,
+            plans: parsedTripData.itinerary
+          };
+        }
+        // If we already have hotels and plans keys, keep as is
+        else if (!parsedTripData.hotels || !parsedTripData.plans) {
+          throw new Error("Missing required data in trip response");
+        }
+      } else {
+        throw new Error("Unexpected data format in AI response");
+      }
+
+      console.log("Successfully parsed trip data:", parsedTripData);
+      
+      // Validate the data structure
+      if (!Array.isArray(parsedTripData.hotels) || !Array.isArray(parsedTripData.plans)) {
+        throw new Error("Hotels and plans must be arrays");
+      }
+
+      if (parsedTripData.hotels.length === 0 || parsedTripData.plans.length === 0) {
+        throw new Error("No hotels or plans found in the response");
+      }
+
     } catch (error) {
       console.error("Error parsing tripData:", error);
-      toast("An error occurred while parsing the trip data.");
+      toast.error(error.message || "Failed to process trip data. Please try again.");
       setLoading(false);
       return;
     }
 
     try {
-      await saveTrip({
+      console.log("Saving trip with data:", {
+        id: docId,
+        userSelection: formData,
+        tripData: parsedTripData,
+        userEmail: user?.email
+      });
+
+      const savedTrip = await saveTrip({
         id: docId,
         userSelection: formData,
         tripData: parsedTripData,
         userEmail: user?.email,
       });
       
+      console.log("Trip saved successfully:", savedTrip);
+      toast.success("Trip generated successfully!");
       setLoading(false);
       navigate(`/view-trip/${docId}`);
     } catch (error) {
       setLoading(false);
       console.error("Error saving trip:", error);
-      toast("An error occurred while saving the trip.");
+      toast.error(error.response?.data?.error || "Failed to save trip. Please try again.");
     }
   };
 
   const GetUserProfile = (tokenInfo) => {
-    console.log(tokenInfo);
+    console.log('Token info received:', tokenInfo);
     axios
       .get(
         `https://www.googleapis.com/oauth2/v1/userinfo?access_token=${tokenInfo?.access_token}`,
@@ -151,23 +215,38 @@ export const CreateTrip = () => {
         }
       )
       .then(async (response) => {
-        console.log(response);
+        console.log('Google API response:', response.data);
         const userData = response.data;
         
         try {
-          await saveUser({
+          // Format user data to match our database schema
+          const formattedUserData = {
             id: userData.id,
             email: userData.email,
             name: userData.name,
             picture: userData.picture
-          });
+          };
+          
+          console.log('Attempting to save user data:', formattedUserData);
+          
+          // Save user to database
+          const savedUser = await saveUser(formattedUserData);
+          console.log('User saved successfully:', savedUser);
+          
+          // Store user data in localStorage
+          localStorage.setItem("user", JSON.stringify(formattedUserData));
+          
+          // Close dialog and proceed with trip generation
+          setOpenDialog(false);
+          generateTrip();
         } catch (error) {
-          console.error("Error saving user:", error);
+          console.error("Error saving user data:", error.response?.data || error.message);
+          toast.error(error.response?.data?.error || "Failed to save user data. Please try again.");
         }
-        
-        localStorage.setItem("user", JSON.stringify(userData));
-        setOpenDialog(false);
-        generateTrip();
+      })
+      .catch((error) => {
+        console.error("Error fetching user profile:", error.response?.data || error.message);
+        toast.error("Failed to get user profile. Please try again.");
       });
   };
   return (
@@ -187,15 +266,12 @@ export const CreateTrip = () => {
             <h2 className="text-xl my-3 font-medium">
               What is destination of choice? *️
             </h2>
-            <GooglePlacesAutocomplete
-              apiKey={import.meta.env.VITE_GOOGLE_PLACE_API_KEY}
-              selectProps={{
-                place,
-                onChange: (v) => {
-                  setPlace(v);
-                  handleInputChange("location", v);
-                },
+            <PlaceSearch
+              onSelectPlace={(place) => {
+                setPlace(place);
+                handleInputChange("location", place);
               }}
+              placeholder="Enter a destination"
             />
           </div>
 

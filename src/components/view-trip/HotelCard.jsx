@@ -1,33 +1,32 @@
-import { getPlaceDetails, PHOTO_REF_URL } from "@/service/globalApi";
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { getPlacePhoto, getMapUrl } from "@/service/osmApi";
 
 export const HotelCard = ({ item, index }) => {
   const [photoUrl, setPhotoUrl] = useState();
+  
   const GetPlacePhoto = async () => {
-    const data = {
-      textQuery: item?.HotelName,
-    };
-    const result = await getPlaceDetails(data).then((response) => {
-      console.log(response.data.places[0].photos[3].name);
-      const photoUrl = PHOTO_REF_URL.replace(
-        "{NAME}",
-        response.data.places[0].photos[3].name
-      );
-      setPhotoUrl(photoUrl);
-    });
+    try {
+      const searchTerm = `${item?.HotelName} ${item?.HotelAddress} hotel`;
+      const imageUrl = await getPlacePhoto(searchTerm);
+      setPhotoUrl(imageUrl);
+    } catch (error) {
+      console.error("Error fetching hotel photo:", error);
+    }
   };
+  
   useEffect(() => {
     item && GetPlacePhoto();
   }, [item]);
+  
   return (
     <Link
-      to={`https://www.google.com/maps/search/?api=1&query=${item?.HotelName}${item?.HotelAddress}`}
+      to={getMapUrl(`${item?.HotelName} ${item?.HotelAddress}`)}
       target="_blank"
     >
       <div id={index} className="hover:scale-105 transition-all cursor-pointer">
         <img
-          src={photoUrl}
+          src={photoUrl || "/placeholder.jpg"}
           className="rounded-xl h-[180px] w-full object-cover"
         />
         <div className="my-2 flex flex-col gap-2">

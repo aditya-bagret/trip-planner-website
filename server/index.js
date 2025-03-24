@@ -15,25 +15,35 @@ app.use(express.json());
 // User Routes
 app.post('/api/users', async (req, res) => {
   try {
+    console.log('Received user data:', req.body);
     const { id, email, name, picture } = req.body;
+    
+    if (!email) {
+      console.error('Email is required');
+      return res.status(400).json({ error: 'Email is required' });
+    }
     
     // Check if user already exists
     const [existingUsers] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+    console.log('Existing users:', existingUsers);
     
     if (existingUsers.length > 0) {
+      console.log('User already exists, returning existing user');
       return res.json(existingUsers[0]);
     }
     
     // Create new user
+    console.log('Creating new user with data:', { id, email, name, picture });
     await pool.query(
       'INSERT INTO users (id, email, name, picture) VALUES (?, ?, ?, ?)',
       [id, email, name, picture]
     );
     
+    console.log('User created successfully');
     res.status(201).json({ id, email, name, picture });
   } catch (error) {
     console.error('Error creating user:', error);
-    res.status(500).json({ error: 'Failed to create user' });
+    res.status(500).json({ error: 'Failed to create user', details: error.message });
   }
 });
 
@@ -42,11 +52,25 @@ app.post('/api/trips', async (req, res) => {
   const connection = await pool.getConnection();
   
   try {
-    await connection.beginTransaction();
-    
+    console.log('Received trip data:', req.body);
     const { id, userSelection, tripData, userEmail } = req.body;
     
+    if (!id || !userEmail) {
+      return res.status(400).json({ error: 'Trip ID and user email are required' });
+    }
+    
+    await connection.beginTransaction();
+    
     // Insert trip
+    console.log('Inserting trip with data:', {
+      id,
+      userEmail,
+      location: userSelection.location?.label,
+      budget: userSelection.budget,
+      traveller: userSelection.traveller,
+      noOfDays: userSelection.noOfDays
+    });
+    
     await connection.query(
       'INSERT INTO trips (id, user_email, location, budget, traveller, no_of_days) VALUES (?, ?, ?, ?, ?, ?)',
       [
@@ -61,6 +85,7 @@ app.post('/api/trips', async (req, res) => {
     
     // Insert hotel data
     if (tripData.hotels && tripData.hotels.length > 0) {
+      console.log('Inserting hotel data for trip:', id);
       await connection.query(
         'INSERT INTO trip_data (id, trip_id, data_type, data_json) VALUES (?, ?, ?, ?)',
         [
@@ -74,6 +99,7 @@ app.post('/api/trips', async (req, res) => {
     
     // Insert plan data
     if (tripData.plans && tripData.plans.length > 0) {
+      console.log('Inserting plan data for trip:', id);
       await connection.query(
         'INSERT INTO trip_data (id, trip_id, data_type, data_json) VALUES (?, ?, ?, ?)',
         [
@@ -86,11 +112,16 @@ app.post('/api/trips', async (req, res) => {
     }
     
     await connection.commit();
+    console.log('Trip saved successfully:', id);
     res.status(201).json({ id });
   } catch (error) {
     await connection.rollback();
     console.error('Error creating trip:', error);
-    res.status(500).json({ error: 'Failed to create trip' });
+    res.status(500).json({ 
+      error: 'Failed to create trip',
+      details: error.message,
+      code: error.code
+    });
   } finally {
     connection.release();
   }
@@ -100,27 +131,42 @@ app.post('/api/trips', async (req, res) => {
 app.get('/api/trips/:tripId', async (req, res) => {
   try {
     const { tripId } = req.params;
+    console.log('Fetching trip with ID:', tripId);
     
     // Get trip details
     const [trips] = await pool.query('SELECT * FROM trips WHERE id = ?', [tripId]);
+    console.log('Found trips:', trips);
     
     if (trips.length === 0) {
+      console.log('No trip found with ID:', tripId);
       return res.status(404).json({ error: 'Trip not found' });
     }
     
     // Get trip data (hotels and plans)
+    console.log('Fetching trip data for trip:', tripId);
     const [tripDataRows] = await pool.query(
       'SELECT data_type, data_json FROM trip_data WHERE trip_id = ?',
       [tripId]
     );
+    console.log('Found trip data rows:', tripDataRows);
     
-    const tripData = {};
+    const tripData = {
+      hotels: [],
+      plans: []
+    };
     
     tripDataRows.forEach(row => {
-      tripData[row.data_type === 'hotel' ? 'hotels' : 'plans'] = JSON.parse(row.data_json);
+      const parsedData = JSON.parse(row.data_json);
+      if (row.data_type === 'hotel') {
+        tripData.hotels = parsedData;
+      } else if (row.data_type === 'plan') {
+        tripData.plans = parsedData;
+      }
     });
     
-    res.json({
+    console.log('Formatted trip data:', tripData);
+    
+    const response = {
       id: tripId,
       userSelection: {
         location: { label: trips[0].location },
@@ -130,10 +176,17 @@ app.get('/api/trips/:tripId', async (req, res) => {
       },
       tripData,
       userEmail: trips[0].user_email
-    });
+    };
+    
+    console.log('Sending response:', response);
+    res.json(response);
   } catch (error) {
     console.error('Error fetching trip:', error);
-    res.status(500).json({ error: 'Failed to fetch trip' });
+    res.status(500).json({ 
+      error: 'Failed to fetch trip',
+      details: error.message,
+      code: error.code
+    });
   }
 });
 

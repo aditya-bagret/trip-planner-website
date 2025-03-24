@@ -3,50 +3,58 @@ import { Button } from "../ui/button";
 import { IoIosSend } from "react-icons/io";
 import { getPlaceDetails, PHOTO_REF_URL } from "@/service/globalApi";
 
-export const InfoSection = ({ trip }) => {
-  const [photoUrl, setPhotoUrl] = useState();
+export const InfoSection = ({ data }) => {
+  const [placeImage, setPlaceImage] = useState("");
+
   const GetPlacePhoto = async () => {
-    const data = {
-      textQuery: trip?.userSelection?.location?.label,
-    };
-    const result = await getPlaceDetails(data).then((response) => {
-      console.log(response.data.places[0].photos[3].name);
-      const photoUrl = PHOTO_REF_URL.replace(
-        "{NAME}",
-        response.data.places[0].photos[3].name
-      );
-      setPhotoUrl(photoUrl);
-    });
+    try {
+      if (!data?.placeName) {
+        console.log("No place name provided");
+        return;
+      }
+
+      const response = await getPlaceDetails(data.placeName);
+      if (response?.data?.places?.[0]?.preview?.source) {
+        setPlaceImage(response.data.places[0].preview.source);
+      } else {
+        console.log("No image found for place:", data.placeName);
+        // Use the placeImageUrl from the AI response as fallback
+        setPlaceImage(data.placeImageUrl || "");
+      }
+    } catch (error) {
+      console.error("Error fetching place photo:", error);
+      // Use the placeImageUrl from the AI response as fallback
+      setPlaceImage(data.placeImageUrl || "");
+    }
   };
+
   useEffect(() => {
-    trip && GetPlacePhoto();
-  }, [trip]);
+    GetPlacePhoto();
+  }, [data]);
+
+  if (!data) {
+    return null;
+  }
+
   return (
-    <div>
-      <img
-        src={photoUrl}
-        className="h-[300px] w-full object-cover rounded-xl"
-      />
-      <div className="flex justify-between items-center">
-        <div className="my-5 flex flex-col gap-2">
-          <h2 className="font-bold text-2xl">
-            {trip?.userSelection?.location?.label}
+    <div className="mt-5">
+      <div className="flex gap-5 items-center">
+        <img
+          src={placeImage || "/placeholder.jpg"}
+          className="w-[150px] h-[100px] rounded-lg object-cover"
+          alt={data.placeName || "Place"}
+        />
+        <div>
+          <h2 className="font-bold text-xl">{data.placeName || "No name available"}</h2>
+          <h2 className="text-gray-500 text-sm mt-2">
+            {data.placeDetails || "No details available"}
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3  ">
-            <h2 className="p-1 px-1 md:px-3 bg-gray-200 rounded-full text-gray-500">
-              📅 {trip?.userSelection?.noOfDays} Days
-            </h2>
-            <h2 className="p-1 px-3 bg-gray-200 rounded-full text-gray-500">
-              💰 {trip?.userSelection?.budget} Budget
-            </h2>
-            <h2 className="p-1 px-3 bg-gray-200 rounded-full text-gray-500">
-              🧳 No. Of Traveler: {trip?.userSelection?.traveller}
-            </h2>
+          <div className="flex gap-5 mt-2">
+            <h2 className="text-sm">⭐ {data.rating || "N/A"}</h2>
+            <h2 className="text-sm">⏰ {data.timeTravel || "N/A"}</h2>
+            <h2 className="text-sm">💰 {data.ticketPricing || "N/A"}</h2>
           </div>
         </div>
-        <Button>
-          <IoIosSend />
-        </Button>
       </div>
     </div>
   );
